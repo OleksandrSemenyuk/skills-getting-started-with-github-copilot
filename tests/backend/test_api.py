@@ -1,12 +1,19 @@
+import asyncio
 import copy
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from src import app as app_module
 
 
-client = TestClient(app_module.app)
+def perform_request(app, method, url, **kwargs):
+    async def _request():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.request(method, url, **kwargs)
+
+    return asyncio.run(_request())
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +29,7 @@ def test_get_activities_returns_data():
     expected_activity_name = "Chess Club"
 
     # Act
-    response = client.get("/activities")
+    response = perform_request(app_module.app, "GET", "/activities")
 
     # Assert
     assert response.status_code == 200
@@ -37,7 +44,12 @@ def test_signup_for_activity_adds_participant():
     email = "newstudent@mergington.edu"
 
     # Act
-    response = client.post(f"/activities/{activity_name}/signup?email={email}")
+    response = perform_request(
+        app_module.app,
+        "POST",
+        f"/activities/{activity_name}/signup",
+        params={"email": email},
+    )
 
     # Assert
     assert response.status_code == 200
@@ -49,10 +61,20 @@ def test_remove_participant_from_activity():
     # Arrange
     activity_name = "Chess Club"
     email = "newstudent@mergington.edu"
-    client.post(f"/activities/{activity_name}/signup?email={email}")
+    perform_request(
+        app_module.app,
+        "POST",
+        f"/activities/{activity_name}/signup",
+        params={"email": email},
+    )
 
     # Act
-    response = client.delete(f"/activities/{activity_name}/signup?email={email}")
+    response = perform_request(
+        app_module.app,
+        "DELETE",
+        f"/activities/{activity_name}/signup",
+        params={"email": email},
+    )
 
     # Assert
     assert response.status_code == 200
